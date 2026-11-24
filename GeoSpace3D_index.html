@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GeoSpace 3D - Media Pembelajaran Bangun Ruang</title>
+<style>
+  :root { --blue:#2563eb; --ink:#172033; --muted:#64748b; --line:#dbe3ef; --bg:#f3f6fb; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:28px; background:var(--bg); color:var(--ink); font-family:Arial,Helvetica,sans-serif; }
+  .app { max-width:1120px; margin:auto; }
+  header { margin-bottom:20px; }
+  h1 { margin:0 0 6px; font-size:27px; }
+  header p { margin:0; color:var(--muted); }
+  .layout { display:grid; grid-template-columns:290px 1fr; gap:18px; }
+  .panel { background:#fff; border:1px solid var(--line); border-radius:14px; padding:20px; box-shadow:0 5px 18px #1e293b0a; }
+  h2 { font-size:17px; margin:0 0 18px; }
+  label { display:block; font-size:14px; font-weight:600; margin:14px 0 7px; }
+  select,input { width:100%; border:1px solid #cbd5e1; border-radius:8px; padding:11px 12px; font-size:15px; background:white; color:var(--ink); }
+  input:disabled { background:#f1f5f9; color:#94a3b8; }
+  button { margin-top:22px; width:100%; border:0; border-radius:9px; padding:12px; background:var(--blue); color:white; font-size:15px; font-weight:700; cursor:pointer; }
+  button:hover { background:#1d4ed8; }
+  .visual { min-height:430px; display:flex; flex-direction:column; }
+  .visual-head { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .visual-head h2 { margin:0; }
+  .canvas-wrap { flex:1; min-height:350px; display:grid; place-items:center; }
+  svg { width:100%; height:350px; overflow:visible; }
+  .results { margin-top:18px; }
+  .result-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .result-card { background:#f8fafc; border:1px solid var(--line); border-radius:10px; padding:14px; }
+  .result-card small { display:block; color:var(--muted); margin-bottom:7px; }
+  .result-card strong { font-size:20px; }
+  .details { margin-top:12px; padding:14px; background:#f8fafc; border-radius:10px; line-height:1.8; font-size:14px; white-space:pre-line; }
+  .hint { color:var(--muted); font-size:13px; margin-top:10px; }
+  .error { color:#b91c1c; font-size:13px; margin-top:10px; min-height:18px; }
+  @media(max-width:760px) { body{padding:16px}.layout{grid-template-columns:1fr}.visual{min-height:380px}.result-grid{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>GeoSpace 3D</h1>
+    <p>Media Pembelajaran Bangun Ruang — visualisasi, volume, dan luas permukaan</p>
+  </header>
+  <main class="layout">
+    <section class="panel">
+      <h2>Masukan Bangun Ruang</h2>
+      <label for="shape">Pilih Bangun Ruang</label>
+      <select id="shape">
+        <option>Kubus</option><option>Balok</option><option>Tabung</option><option>Kerucut</option><option>Bola</option>
+      </select>
+      <div id="fields"></div>
+      <button id="process">PROSES</button>
+      <div class="error" id="error" role="alert"></div>
+      <p class="hint">Masukkan ukuran positif. Hasil dihitung setelah tombol PROSES ditekan.</p>
+    </section>
+    <section>
+      <div class="panel visual">
+        <div class="visual-head"><h2 id="visualTitle">Visualisasi Kubus</h2></div>
+        <div class="canvas-wrap"><svg id="drawing" viewBox="0 0 600 350" role="img" aria-label="Visualisasi bangun ruang"></svg></div>
+      </div>
+      <div class="panel results">
+        <h2>Hasil Perhitungan</h2>
+        <div id="resultContent" class="hint">Selamat datang di GeoSpace 3D! Pilih bangun ruang, masukkan ukurannya, lalu tekan PROSES.</div>
+      </div>
+    </section>
+  </main>
+</div>
+<script>
+const shape = document.getElementById('shape');
+const fields = document.getElementById('fields');
+const drawing = document.getElementById('drawing');
+const errorBox = document.getElementById('error');
+const resultContent = document.getElementById('resultContent');
+const labels = {
+  Kubus:['Sisi'], Balok:['Panjang','Lebar','Tinggi'],
+  Tabung:['Jari-jari','Tinggi'], Kerucut:['Jari-jari','Tinggi'], Bola:['Jari-jari']
+};
+function fmt(n) {
+  if (!Number.isFinite(n)) return 'Tidak terhingga';
+  return new Intl.NumberFormat('id-ID',{maximumFractionDigits:6}).format(n);
+}
+function buildFields() {
+  fields.innerHTML = '';
+  labels[shape.value].forEach((name,i) => {
+    const label = document.createElement('label');
+    label.htmlFor = 'dimension'+i; label.textContent = name;
+    const input = document.createElement('input');
+    input.id = 'dimension'+i; input.type = 'number'; input.min = '0'; input.step = 'any';
+    input.value = ({Kubus:[5],Balok:[5,4,3],Tabung:[3,5],Kerucut:[3,5],Bola:[3]})[shape.value][i];
+    input.required = true;
+    fields.append(label,input);
+  });
+  document.getElementById('visualTitle').textContent = 'Visualisasi '+shape.value;
+  errorBox.textContent = '';
+  drawShape(shape.value, [1,1,1]);
+  resultContent.textContent = 'Silakan masukkan ukuran bangun ruang. Tekan tombol PROSES untuk menghitung.';
+}
+shape.addEventListener('change',buildFields);
+function polygon(points,fill,stroke='#263449',opacity=0.9) {
+  return `<polygon points="${points.map(p=>p.join(',')).join(' ')}" fill="${fill}" fill-opacity="${opacity}" stroke="${stroke}" stroke-width="2" stroke-linejoin="round"/>`;
+}
+function drawShape(name, dims) {
+  const [a,b,c] = dims;
+  let s='';
+  if(name==='Kubus' || name==='Balok') {
+    const p=name==='Kubus'?a:a, l=name==='Kubus'?a:b, h=name==='Kubus'?a:c;
+    const scale=180/Math.max(p,l,h), x=p*scale, y=l*scale*.58, z=h*scale;
+    const ox=300-(x+y)*.42, oy=235;
+    const A=[ox,oy], B=[ox+x,oy], C=[ox+x+y*.42,oy-y*.58], D=[ox+y*.42,oy-y*.58];
+    const E=[A[0],A[1]-z], F=[B[0],B[1]-z], G=[C[0],C[1]-z], H=[D[0],D[1]-z];
+    const color=name==='Kubus'?'#60a5fa':'#4ade80';
+    s+=polygon([D,C,G,H],name==='Kubus'?'#3b82f6':'#22c55e');
+    s+=polygon([B,C,G,F],name==='Kubus'?'#2563eb':'#16a34a');
+    s+=polygon([A,B,F,E],color);
+    s+=polygon([E,F,G,H],name==='Kubus'?'#93c5fd':'#86efac');
+  } else if(name==='Tabung') {
+    const rx=110, ry=36, top=75, bottom=265;
+    s+=`<path d="M190 ${top} L190 ${bottom} A110 36 0 0 0 410 ${bottom} L410 ${top}" fill="#38bdf8" fill-opacity=".8" stroke="#155e75" stroke-width="2"/>`;
+    s+=`<ellipse cx="300" cy="${top}" rx="${rx}" ry="${ry}" fill="#7dd3fc" stroke="#155e75" stroke-width="2"/>`;
+    s+=`<path d="M190 ${bottom} A110 36 0 0 0 410 ${bottom}" fill="none" stroke="#155e75" stroke-width="2"/>`;
+  } else if(name==='Kerucut') {
+    s+=`<path d="M300 55 L190 270 A110 36 0 0 0 410 270 Z" fill="#fb923c" fill-opacity=".85" stroke="#9a3412" stroke-width="2"/>`;
+    s+=`<ellipse cx="300" cy="270" rx="110" ry="36" fill="#fdba74" stroke="#9a3412" stroke-width="2"/>`;
+    s+=`<path d="M300 55 L300 270" stroke="#9a3412" stroke-dasharray="5 5" stroke-width="2"/>`;
+  } else {
+    s+=`<defs><radialGradient id="sphereGrad" cx="32%" cy="27%"><stop offset="0" stop-color="#f5d0fe"/><stop offset=".55" stop-color="#c084fc"/><stop offset="1" stop-color="#7e22ce"/></radialGradient></defs><circle cx="300" cy="175" r="125" fill="url(#sphereGrad)" stroke="#6b21a8" stroke-width="2"/>`;
+    s+=`<ellipse cx="300" cy="175" rx="125" ry="42" fill="none" stroke="#6b21a8" stroke-opacity=".5" stroke-dasharray="5 5"/>`;
+  }
+  drawing.innerHTML=s;
+}
+function process() {
+  const inputs=[...fields.querySelectorAll('input')];
+  const d=inputs.map(x=>Number(x.value));
+  if(d.some((v,i)=>inputs[i].value.trim()==='' || !Number.isFinite(v) || v<=0)) {
+    errorBox.textContent='Semua ukuran harus berupa angka positif dan valid!';
+    return;
+  }
+  errorBox.textContent='';
+  let volume, area, detail, vFormula, aFormula, extra='';
+  const [a,b,c]=d, pi=Math.PI;
+  switch(shape.value) {
+    case 'Kubus':
+      volume=a**3; area=6*a**2; detail=`Sisi = ${fmt(a)}`;
+      vFormula='V = s³'; aFormula='LP = 6 × s²'; extra=`V = ${fmt(a)}³ = ${fmt(volume)}\nLP = 6 × ${fmt(a)}² = ${fmt(area)}`; break;
+    case 'Balok':
+      volume=a*b*c; area=2*(a*b+a*c+b*c); detail=`Panjang = ${fmt(a)} | Lebar = ${fmt(b)} | Tinggi = ${fmt(c)}`;
+      vFormula='V = p × l × t'; aFormula='LP = 2 × (pl + pt + lt)';
+      extra=`V = ${fmt(a)} × ${fmt(b)} × ${fmt(c)} = ${fmt(volume)}\nLP = 2 × (${fmt(a*b)} + ${fmt(a*c)} + ${fmt(b*c)}) = ${fmt(area)}`; break;
+    case 'Tabung':
+      volume=pi*a**2*b; area=2*pi*a*(a+b); detail=`Jari-jari = ${fmt(a)} | Tinggi = ${fmt(b)}`;
+      vFormula='V = π × r² × t'; aFormula='LP = 2 × π × r × (r + t)';
+      extra=`V = π × ${fmt(a)}² × ${fmt(b)} = ${fmt(volume)}\nLP = 2 × π × ${fmt(a)} × (${fmt(a)} + ${fmt(b)}) = ${fmt(area)}`; break;
+    case 'Kerucut': {
+      const g=Math.hypot(a,b); volume=pi*a**2*b/3; area=pi*a*(a+g);
+      detail=`Jari-jari = ${fmt(a)} | Tinggi = ${fmt(b)} | Garis pelukis = ${fmt(g)}`;
+      vFormula='V = (π × r² × t) ÷ 3'; aFormula='LP = π × r × (r + g)';
+      extra=`V = (π × ${fmt(a)}² × ${fmt(b)}) ÷ 3 = ${fmt(volume)}\nLP = π × ${fmt(a)} × (${fmt(a)} + ${fmt(g)}) = ${fmt(area)}`; break;
+    }
+    case 'Bola':
+      volume=4*pi*a**3/3; area=4*pi*a**2; detail=`Jari-jari = ${fmt(a)}`;
+      vFormula='V = (4 × π × r³) ÷ 3'; aFormula='LP = 4 × π × r²';
+      extra=`V = (4 × π × ${fmt(a)}³) ÷ 3 = ${fmt(volume)}\nLP = 4 × π × ${fmt(a)}² = ${fmt(area)}`; break;
+  }
+  if(!Number.isFinite(volume)||!Number.isFinite(area)) { errorBox.textContent='Hasil terlalu besar untuk dihitung.'; return; }
+  drawShape(shape.value,d);
+  document.getElementById('visualTitle').textContent='Visualisasi '+shape.value;
+  resultContent.innerHTML=`
+    <div class="result-grid">
+      <div class="result-card"><small>Volume</small><strong>${fmt(volume)} satuan³</strong></div>
+      <div class="result-card"><small>Luas Permukaan</small><strong>${fmt(area)} satuan²</strong></div>
+    </div>
+    <div class="details"><b>BANGUN RUANG: ${shape.value}</b>\n${detail}\n\n<b>RUMUS VOLUME:</b> ${vFormula}\n<b>RUMUS LUAS PERMUKAAN:</b> ${aFormula}\n\n${extra}\n\nPerhitungan berhasil!</div>`;
+}
+document.getElementById('process').addEventListener('click',process);
+buildFields();
+</script>
+</body>
+</html>
